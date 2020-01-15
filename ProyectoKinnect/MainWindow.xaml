@@ -1,0 +1,14 @@
+﻿<Window x:Class="ProyectoKinnect.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ProyectoKinnect"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="531.818" Width="823.601" Loaded="Window_Loaded">
+    <Grid Margin="0,0,-6.4,-19.6">
+        <Image x:Name="image" HorizontalAlignment="Left" Height="480" Margin="174,10,0,0" VerticalAlignment="Top" Width="640"/>
+        <TextBlock x:Name="texto" HorizontalAlignment="Left" Margin="10,94,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Height="122" Width="159" FontWeight="Bold"/>
+
+    </Grid>
+</Window>
