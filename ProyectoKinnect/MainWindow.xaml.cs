@@ -60,9 +60,6 @@ namespace ProyectoKinnect
                 sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
                 sensor.ColorFrameReady += SensorColorFrameReady;
             }
-
-           
-
         }
 
         private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
