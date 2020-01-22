@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ejercicio1", "ProyectoKinne
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ejercicio2", "Ejercicio2\Ejercicio2.csproj", "{9B7F2F11-D0E3-4F6F-9EF6-8C1C2CAD6784}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EsqueletoPlantilla", "..\EsqueletoPlantilla\EsqueletoPlantilla.csproj", "{8121846D-923E-4BB0-8647-30DA753D156E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EsqueletoPlantilla", "EsqueletoPlantilla\EsqueletoPlantilla.csproj", "{8121846D-923E-4BB0-8647-30DA753D156E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
