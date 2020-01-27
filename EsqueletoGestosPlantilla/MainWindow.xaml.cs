@@ -4,13 +4,17 @@
 // </copyright>
 //------------------------------------------------------------------------------
 
-namespace Esqueleto
+namespace EsqueletoGestos
 {
-    using System;
     using System.IO;
     using System.Windows;
     using System.Windows.Media;
     using Microsoft.Kinect;
+
+    //*******************************************
+    using Kinect.Toolbox;
+    using System;
+    using System.Windows.Media.Imaging;
 
     /// <summary>
     /// Interaction logic for MainWindow.xaml
@@ -82,16 +86,67 @@ namespace Esqueleto
         /// </summary>
         private DrawingImage imageSource;
 
+        // Circle
+        private string circleKBPath;
+
+        private byte[] colorPixels;
+
+        private WriteableBitmap colorBitmap;
+        
+        //Buffer intermedio bytes profundidad
+        private DepthImagePixel[] depthPixels;
+
+
+        //***********************TO DO*******************************
+        // Definir reconocedores como miembros privados
+        SwipeGestureDetector swipeGestureRecognizer;
+        TemplatedGestureDetector circleGestureRecognizer;
+
         /// <summary>
         /// Initializes a new instance of the MainWindow class.
         /// </summary>
-        /// 
-
-        private Skeleton[] skeletons;
-        
         public MainWindow()
         {
             InitializeComponent();
+        }
+
+        //**************** TO DO ********************************************
+        // Definir métodos manejadores que se ejecuten cuando se detecte gesto
+        void OnGestureDetectedSwipe(string gesture)
+        {
+            //Options: SwipeToLeft and SwipeToRight
+            if (gesture == "SwipeToLeft")
+            {
+                sensor.DepthStream.Disable();
+                this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
+                this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
+            }else if(gesture == "SwipeToRight")
+            {
+                sensor.ColorStream.Disable();
+                sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+                sensor.ColorFrameReady += SensorColorFrameReady;
+            }
+   
+        }
+        void OnGestureDetectedCircle(string gesture)
+        {
+            using (Stream recordStream = File.Create(circleKBPath))
+            {
+                circleGestureRecognizer.SaveState(recordStream);
+            }
+
+            if (Image2.Visibility == Visibility.Visible) {
+                Image2.Visibility = Visibility.Hidden;
+            }
+            else if (Image2.Visibility == Visibility.Hidden)
+            {
+                Image2.Visibility = Visibility.Visible;
+            }
+
+            // Exercise code in exercise 2.
+            //sensor.DepthStream.Disable();
+            //sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+            //sensor.ColorFrameReady += SensorColorFrameReady;
         }
 
         /// <summary>
@@ -141,6 +196,23 @@ namespace Esqueleto
         /// <param name="e">event arguments</param>
         private void WindowLoaded(object sender, RoutedEventArgs e)
         {
+            //********************TO DO*************************************
+            // Instanciar reconocedores
+            // Si es reconocedor Template_Based abrir fichero con templates             
+            // circleKBPath = Path.Combine(Environment.CurrentDirectory, @"Datos\circleKB.save");
+            circleKBPath = Path.Combine(Environment.CurrentDirectory, @"Datos\circleKB.save");
+            swipeGestureRecognizer = new SwipeGestureDetector();
+
+
+            //********************TO DO*************************************
+            // Añadir los manejadores como listeners de OnGestureDetected
+            swipeGestureRecognizer.OnGestureDetected += OnGestureDetectedSwipe;
+            using (Stream recordStream = File.Open(circleKBPath, FileMode.Open))
+            {
+                circleGestureRecognizer = new TemplatedGestureDetector("Circle", recordStream);
+                circleGestureRecognizer.OnGestureDetected += OnGestureDetectedCircle;
+            }
+
             // Create the drawing group we'll use for drawing
             this.drawingGroup = new DrawingGroup();
 
@@ -150,31 +222,45 @@ namespace Esqueleto
             // Display the drawing using our image control
             Image.Source = this.imageSource;
 
-            //***************************TO DO**********************************
-            // DETECCIÓN SENSORES Y ARRANQUE. REGISTRO MANEJADOR DE EVENTOS 
-            // ACTIVACIÓN STREAM ESQUELETOS
+            // Look through all sensors and start the first connected one.
+            // This requires that a Kinect is connected at the time of app startup.
+            // To make your app robust against plug/unplug, 
+            // it is recommended to use KinectSensorChooser provided in Microsoft.Kinect.Toolkit
             foreach (var potentialSensor in KinectSensor.KinectSensors)
             {
                 if (potentialSensor.Status == KinectStatus.Connected)
                 {
-                    sensor = potentialSensor;
-                    if (this.sensor != null)
-                    {
-                        //Habilitamos el sensor
-                        this.sensor.SkeletonStream.Enable();
-
-                        this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
-
-                        this.sensor.Start();
-                    }
-                    break;
-                }
-                else
-                {
+                    this.sensor = potentialSensor;
                     break;
                 }
             }
-            
+
+            if (null != this.sensor)
+            {
+                sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+                sensor.ColorFrameReady += SensorColorFrameReady;
+
+                // Turn on the skeleton stream to receive skeleton frames
+                this.sensor.SkeletonStream.Enable();
+
+                // Add an event handler to be called whenever there is new color frame data
+                this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
+
+                // Start the sensor!
+                try
+                {
+                    this.sensor.Start();
+                }
+                catch (IOException)
+                {
+                    this.sensor = null;
+                }
+            }
+
+            if (null == this.sensor)
+            {
+                this.statusBarText.Text = Properties.Resources.NoKinectReady;
+            }
         }
 
         /// <summary>
@@ -184,15 +270,9 @@ namespace Esqueleto
         /// <param name="e">event arguments</param>
         private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            //***************************TO DO**********************************
-            //PARADA DE SENSOR
-            try
+            if (null != this.sensor)
             {
-                sensor.Stop();
-            }
-            catch (NullReferenceException)
-            {
-                sensor = null;
+                this.sensor.Stop();
             }
         }
 
@@ -203,17 +283,15 @@ namespace Esqueleto
         /// <param name="e">event arguments</param>
         private void SensorSkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
         {
+            Skeleton[] skeletons = new Skeleton[0];
 
             using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
             {
-                //****************************TO DO**********************************
-                //COPIADO DE LOS ESQUELETOS DEL FRAME A ALMACENAMIENTO SKELETONS
                 if (skeletonFrame != null)
                 {
                     skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
                     skeletonFrame.CopySkeletonDataTo(skeletons);
                 }
-
             }
 
             using (DrawingContext dc = this.drawingGroup.Open())
@@ -242,6 +320,7 @@ namespace Esqueleto
                         }
                     }
                 }
+
 
                 // prevent drawing outside of our render area
                 this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
@@ -279,52 +358,44 @@ namespace Esqueleto
             this.DrawBone(skeleton, drawingContext, JointType.KneeLeft, JointType.AnkleLeft);
             this.DrawBone(skeleton, drawingContext, JointType.AnkleLeft, JointType.FootLeft);
 
-            //*************************************TO DO************************************
-            // DIBUJAR LA PIERNA DERECHA
+            // Right Leg
             this.DrawBone(skeleton, drawingContext, JointType.HipRight, JointType.KneeRight);
             this.DrawBone(skeleton, drawingContext, JointType.KneeRight, JointType.AnkleRight);
             this.DrawBone(skeleton, drawingContext, JointType.AnkleRight, JointType.FootRight);
-
-            // ************************************TO DO************************************
-            // DIBUJAR TODOS LOS JOINTS COMO ELIPSES (BUCLE)
-            // - Si el estado del Joint es "Tracked" usar this.trackedJointBrush;
-            // - Si el estado del Joint es "Inferred" usar this.inferredJointBrush;
-            //Primitivas de dibujado
-            Brush drawBrush = null;
-            if (skeletons.Length != 0)
+ 
+            // Render Joints
+            foreach (Joint joint in skeleton.Joints)
             {
-                foreach (Skeleton skel in skeletons)
+                Brush drawBrush = null;
+
+                if (joint.TrackingState == JointTrackingState.Tracked)
                 {
-                    //dibujado de lados en los que ocurre recortado (clipping)
-                    if (skel.TrackingState == SkeletonTrackingState.Tracked)
-                    {
-                        drawBrush = trackedJointBrush;
+                    drawBrush = this.trackedJointBrush;                    
+                }
+                else if (joint.TrackingState == JointTrackingState.Inferred)
+                {
+                    drawBrush = this.inferredJointBrush;                    
+                }
 
-                        //dibujado de huesos y articulaciones
-                        for(int i = 0; i <= 19; i++)
-                        {
-                            Joint joint = skel.Joints[(JointType)i];
-                            drawingContext.DrawEllipse(drawBrush, null, this.SkeletonPointToScreen(joint.Position), JointThickness, JointThickness);
-                        }
-                    }
-                    else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
-                    {
-                        //dibujado de un punto en la posición
-                        //skel.Position
-                        drawBrush = inferredJointBrush;
+                if (drawBrush != null)
+                {
+                    drawingContext.DrawEllipse(drawBrush, null, this.SkeletonPointToScreen(joint.Position), JointThickness, JointThickness);
+                }
 
-                        //dibujado de huesos y articulaciones
-                        for (int i = 0; i <= 30; i++)
-                        {
-                            Joint joint = skel.Joints[(JointType)i];
-                            drawingContext.DrawEllipse(drawBrush, null, this.SkeletonPointToScreen(joint.Position), JointThickness, JointThickness);
-                        }
-                    }
+                //***************************TO DO *********************************
+                // Si el joint está en estado JointTrackingState.Tracked y su tipo 
+                // es el que queremos seguir joint.JointType == JointType.HandRight
+                // añadir la posición del Joint al reconocedor
+                if (joint.JointType == JointType.HandLeft && joint.TrackingState == JointTrackingState.Tracked)
+                {
+                    swipeGestureRecognizer.Add(joint.Position, sensor);
+                }
+
+                if (joint.JointType == JointType.HandRight)
+                {
+                    circleGestureRecognizer.Add(joint.Position, sensor);
                 }
             }
-
-            // UTILIZAR ESTA PRIMITIVA PARA EL DIBUJADO DE LA ELIPSE
-            //drawingContext.DrawEllipse(drawBrush, null, this.SkeletonPointToScreen(joint.Position), JointThickness, JointThickness);
         }
 
         /// <summary>
@@ -349,35 +420,31 @@ namespace Esqueleto
         /// <param name="jointType1">joint to end drawing at</param>
         private void DrawBone(Skeleton skeleton, DrawingContext drawingContext, JointType jointType0, JointType jointType1)
         {
-            Pen drawPen;
-
-            //********************************TO DO***************************************
-            //OBTENER LOS JOINTS DE LOS TIPOS PASADOS COMO PARÁMETROS
-            // joint0 y  joint1
             Joint joint0 = skeleton.Joints[jointType0];
             Joint joint1 = skeleton.Joints[jointType1];
 
-            //EN FUNCION DE SU ESTADO:
-            // -SI AMBOS "Tracked" dibujar con this.trackedBonePen
-            // -SI uno de los dos "NotTracked" no dibujar nada: return;
-            // -SI AMBOS "Inferred" no dibujar nada: return;
-            // -SI uno "Inferred" y otro "Tracked" dibujar con this.inferredBonePen
+            // If we can't find either of these joints, exit
+            if (joint0.TrackingState == JointTrackingState.NotTracked ||
+                joint1.TrackingState == JointTrackingState.NotTracked)
+            {
+                return;
+            }
+
+            // Don't draw if both points are inferred
+            if (joint0.TrackingState == JointTrackingState.Inferred &&
+                joint1.TrackingState == JointTrackingState.Inferred)
+            {
+                return;
+            }
+
+            // We assume all drawn bones are inferred unless BOTH joints are tracked
+            Pen drawPen = this.inferredBonePen;
             if (joint0.TrackingState == JointTrackingState.Tracked && joint1.TrackingState == JointTrackingState.Tracked)
             {
                 drawPen = this.trackedBonePen;
-                drawingContext.DrawLine(drawPen, this.SkeletonPointToScreen(joint0.Position), this.SkeletonPointToScreen(joint1.Position));
-            }
-            
-            if((joint0.TrackingState == JointTrackingState.Inferred && joint1.TrackingState == JointTrackingState.Tracked) ||
-                joint0.TrackingState == JointTrackingState.Tracked && joint1.TrackingState == JointTrackingState.Inferred)
-            {
-                drawPen = this.inferredBonePen;
-                drawingContext.DrawLine(drawPen, this.SkeletonPointToScreen(joint0.Position), this.SkeletonPointToScreen(joint1.Position));
             }
 
-            else{
-                return;
-            }
+            drawingContext.DrawLine(drawPen, this.SkeletonPointToScreen(joint0.Position), this.SkeletonPointToScreen(joint1.Position));
         }
 
         /// <summary>
@@ -391,17 +458,72 @@ namespace Esqueleto
             {
                 if (this.checkBoxSeatedMode.IsChecked.GetValueOrDefault())
                 {
-                    //*****************************TO DO**********************************
-                    //ACTIVAR MODO SENTADO
-                    sensor.SkeletonStream.TrackingMode = SkeletonTrackingMode.Seated;
+                    this.sensor.SkeletonStream.TrackingMode = SkeletonTrackingMode.Seated;
                 }
                 else
                 {
-                    //*****************************TO DO**********************************
-                    //ACTIVAR MODO DEFAULT
-                    sensor.SkeletonStream.TrackingMode = SkeletonTrackingMode.Default;
+                    this.sensor.SkeletonStream.TrackingMode = SkeletonTrackingMode.Default;
                 }
             }
         }
+
+
+        private void SensorDepthFrameReady(object sender, DepthImageFrameReadyEventArgs e)
+        {
+            using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+            {
+                this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
+                this.colorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
+                this.colorBitmap = new WriteableBitmap(this.sensor.DepthStream.FrameWidth, this.sensor.DepthStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
+
+                if (depthFrame != null)
+                {
+                    depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
+
+                    //Conversion profunidad RGB
+                    int minDepth = depthFrame.MinDepth;
+                    int maxDepth = depthFrame.MaxDepth;
+                    // Convertir profundidad a RGB
+                    int colorPixelIndex = 0;
+                    for (int i = 0; i < this.depthPixels.Length; ++i)
+                    {
+                        short depth = depthPixels[i].Depth;
+                        byte intensity = (byte)(depth >= minDepth && depth <= maxDepth ?
+                        depth : 0);
+                        this.colorPixels[colorPixelIndex++] = intensity;
+                        this.colorPixels[colorPixelIndex++] = intensity;
+                        this.colorPixels[colorPixelIndex++] = intensity;
+                        ++colorPixelIndex; // no alpha channel RGB
+                    }
+
+                    //Copiar color pixels a bitmap(visualizacion)
+                    // Copiar pixels RGB en el bitmap
+                    this.colorBitmap.WritePixels(
+                    new Int32Rect(0, 0, this.colorBitmap.PixelWidth,
+                    this.colorBitmap.PixelHeight),
+                    this.colorPixels,
+                    this.colorBitmap.PixelWidth * sizeof(int), 0);
+                    Image2.Source = colorBitmap;
+                }
+            }
+        }
+
+        private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
+        {
+            using (ColorImageFrame colorFrame = e.OpenColorImageFrame())
+            {
+                this.colorPixels = new byte[this.sensor.ColorStream.FramePixelDataLength];
+                this.colorBitmap = new WriteableBitmap(this.sensor.ColorStream.FrameWidth, this.sensor.ColorStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
+
+                if (colorFrame != null)
+                {
+                    colorFrame.CopyPixelDataTo(this.colorPixels);
+                    this.colorBitmap.WritePixels(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight), this.colorPixels, this.colorBitmap.PixelWidth * sizeof(int), 0);
+                    Image2.Source = colorBitmap;
+                }
+            }
+        }
+
+
     }
 }
