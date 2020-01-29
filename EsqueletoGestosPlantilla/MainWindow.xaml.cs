@@ -87,15 +87,14 @@ namespace EsqueletoGestos
         private DrawingImage imageSource;
 
         // Circle
-        private string circleKBPath;
+        private string circleKBPath = Path.Combine(Environment.CurrentDirectory, @"Datos\circleKB.save");
 
+        // Color
         private byte[] colorPixels;
-
         private WriteableBitmap colorBitmap;
-        
-        //Buffer intermedio bytes profundidad
-        private DepthImagePixel[] depthPixels;
 
+        // Buffer intermedio de bytes de profundidad
+        private DepthImagePixel[] depthPixels;
 
         //***********************TO DO*******************************
         // Definir reconocedores como miembros privados
@@ -114,19 +113,36 @@ namespace EsqueletoGestos
         // Definir métodos manejadores que se ejecuten cuando se detecte gesto
         void OnGestureDetectedSwipe(string gesture)
         {
-            //Options: SwipeToLeft and SwipeToRight
-            if (gesture == "SwipeToLeft")
+            //string gesture = "SwipeToLeft" and "SwipeToRight"
+            
+            if (gesture == "SwipeToRight")
             {
+                //Desactivamos el sensor de profundidad 
                 sensor.DepthStream.Disable();
-                this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
-                this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
-            }else if(gesture == "SwipeToRight")
-            {
-                sensor.ColorStream.Disable();
+
+                //Habilitamos el sensor de color
                 sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
                 sensor.ColorFrameReady += SensorColorFrameReady;
+
+            }else if (gesture == "SwipeToLeft")
+            {
+                //Desactivamos el sensor de color 
+                sensor.ColorStream.Disable();
+
+                //Habilitamos el sensor de profundidad
+                this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
+                this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
             }
-   
+
+            // Iniciamos el sensor
+            try
+            {
+                this.sensor.Start();
+            }
+            catch (NullReferenceException)
+            {
+                this.sensor = null;
+            }
         }
         void OnGestureDetectedCircle(string gesture)
         {
@@ -135,18 +151,16 @@ namespace EsqueletoGestos
                 circleGestureRecognizer.SaveState(recordStream);
             }
 
-            if (Image2.Visibility == Visibility.Visible) {
-                Image2.Visibility = Visibility.Hidden;
-            }
-            else if (Image2.Visibility == Visibility.Hidden)
+            if (Image_Skeleton.Visibility == Visibility.Hidden)
             {
-                Image2.Visibility = Visibility.Visible;
-            }
+                //Si la imagen es invisible la hacemos visible
+                Image_Skeleton.Visibility = Visibility.Visible;
 
-            // Exercise code in exercise 2.
-            //sensor.DepthStream.Disable();
-            //sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
-            //sensor.ColorFrameReady += SensorColorFrameReady;
+            }else if (Image_Skeleton.Visibility == Visibility.Visible) 
+            {
+                //Si la imagen es visible la hacemos invisible
+                Image_Skeleton.Visibility = Visibility.Hidden;
+            }
         }
 
         /// <summary>
@@ -200,18 +214,16 @@ namespace EsqueletoGestos
             // Instanciar reconocedores
             // Si es reconocedor Template_Based abrir fichero con templates             
             // circleKBPath = Path.Combine(Environment.CurrentDirectory, @"Datos\circleKB.save");
-            circleKBPath = Path.Combine(Environment.CurrentDirectory, @"Datos\circleKB.save");
             swipeGestureRecognizer = new SwipeGestureDetector();
-
-
-            //********************TO DO*************************************
-            // Añadir los manejadores como listeners de OnGestureDetected
-            swipeGestureRecognizer.OnGestureDetected += OnGestureDetectedSwipe;
             using (Stream recordStream = File.Open(circleKBPath, FileMode.Open))
             {
                 circleGestureRecognizer = new TemplatedGestureDetector("Circle", recordStream);
                 circleGestureRecognizer.OnGestureDetected += OnGestureDetectedCircle;
             }
+
+            //********************TO DO*************************************
+            // Añadir los manejadores como listeners de OnGestureDetected
+            swipeGestureRecognizer.OnGestureDetected += OnGestureDetectedSwipe;
 
             // Create the drawing group we'll use for drawing
             this.drawingGroup = new DrawingGroup();
@@ -220,7 +232,7 @@ namespace EsqueletoGestos
             this.imageSource = new DrawingImage(this.drawingGroup);
 
             // Display the drawing using our image control
-            Image.Source = this.imageSource;
+            Image_Skeleton.Source = this.imageSource;
 
             // Look through all sensors and start the first connected one.
             // This requires that a Kinect is connected at the time of app startup.
@@ -231,24 +243,28 @@ namespace EsqueletoGestos
                 if (potentialSensor.Status == KinectStatus.Connected)
                 {
                     this.sensor = potentialSensor;
+                    if (sensor != null)
+                    {
+                        colorPixels = new byte[sensor.ColorStream.FramePixelDataLength];
+                        colorBitmap = new WriteableBitmap(sensor.ColorStream.FrameWidth, sensor.ColorStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
+                        sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+                        sensor.ColorFrameReady += SensorColorFrameReady;
+                    }
                     break;
                 }
             }
 
             if (null != this.sensor)
             {
-                sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
-                sensor.ColorFrameReady += SensorColorFrameReady;
-
                 // Turn on the skeleton stream to receive skeleton frames
                 this.sensor.SkeletonStream.Enable();
 
                 // Add an event handler to be called whenever there is new color frame data
                 this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
 
-                // Start the sensor!
                 try
                 {
+                    // Iniciamos el sensor
                     this.sensor.Start();
                 }
                 catch (IOException)
@@ -262,6 +278,65 @@ namespace EsqueletoGestos
                 this.statusBarText.Text = Properties.Resources.NoKinectReady;
             }
         }
+
+        /** */
+        private void SensorDepthFrameReady(object sender, DepthImageFrameReadyEventArgs e)
+        {
+            using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+            {
+                this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
+                this.colorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
+                this.colorBitmap = new WriteableBitmap(this.sensor.DepthStream.FrameWidth, this.sensor.DepthStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
+
+                if (depthFrame != null)
+                {
+                    depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
+
+                    //Conversion profunidad RGB
+                    int minDepth = depthFrame.MinDepth;
+                    int maxDepth = depthFrame.MaxDepth;
+                    // Convertir profundidad a RGB
+                    int colorPixelIndex = 0;
+                    for (int i = 0; i < this.depthPixels.Length; ++i)
+                    {
+                        short depth = depthPixels[i].Depth;
+                        byte intensity = (byte)(depth >= minDepth && depth <= maxDepth ?
+                        depth : 0);
+                        this.colorPixels[colorPixelIndex++] = intensity;
+                        this.colorPixels[colorPixelIndex++] = intensity;
+                        this.colorPixels[colorPixelIndex++] = intensity;
+                        ++colorPixelIndex; // no alpha channel RGB
+                    }
+
+                    //Copiar color pixels a bitmap(visualizacion)
+                    // Copiar pixels RGB en el bitmap
+                    this.colorBitmap.WritePixels(
+                    new Int32Rect(0, 0, this.colorBitmap.PixelWidth,
+                    this.colorBitmap.PixelHeight),
+                    this.colorPixels,
+                    this.colorBitmap.PixelWidth * sizeof(int), 0);
+
+                    Image.Source = colorBitmap;
+                }
+            }
+        }
+
+        private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
+        {
+            using (ColorImageFrame colorFrame = e.OpenColorImageFrame())
+            {
+                this.colorPixels = new byte[this.sensor.ColorStream.FramePixelDataLength];
+                this.colorBitmap = new WriteableBitmap(this.sensor.ColorStream.FrameWidth, this.sensor.ColorStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
+
+                if (colorFrame != null)
+                {
+                    colorFrame.CopyPixelDataTo(this.colorPixels);
+                    this.colorBitmap.WritePixels(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight), this.colorPixels, this.colorBitmap.PixelWidth * sizeof(int), 0);
+                    Image.Source = colorBitmap;
+                }
+            }
+        }
+
 
         /// <summary>
         /// Execute shutdown tasks
@@ -297,7 +372,7 @@ namespace EsqueletoGestos
             using (DrawingContext dc = this.drawingGroup.Open())
             {
                 // Draw a transparent background to set the render size
-                dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+                dc.DrawRectangle(Brushes.Transparent, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
 
                 if (skeletons.Length != 0)
                 {
@@ -320,7 +395,6 @@ namespace EsqueletoGestos
                         }
                     }
                 }
-
 
                 // prevent drawing outside of our render area
                 this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
@@ -386,14 +460,13 @@ namespace EsqueletoGestos
                 // Si el joint está en estado JointTrackingState.Tracked y su tipo 
                 // es el que queremos seguir joint.JointType == JointType.HandRight
                 // añadir la posición del Joint al reconocedor
-                if (joint.JointType == JointType.HandLeft && joint.TrackingState == JointTrackingState.Tracked)
-                {
-                    swipeGestureRecognizer.Add(joint.Position, sensor);
-                }
-
-                if (joint.JointType == JointType.HandRight)
+                if (joint.JointType == JointType.HandRight && joint.TrackingState == JointTrackingState.Tracked)
                 {
                     circleGestureRecognizer.Add(joint.Position, sensor);
+                }
+                if (joint.JointType == JointType.HandLeft )
+                {
+                    swipeGestureRecognizer.Add(joint.Position, sensor);
                 }
             }
         }
@@ -466,64 +539,5 @@ namespace EsqueletoGestos
                 }
             }
         }
-
-
-        private void SensorDepthFrameReady(object sender, DepthImageFrameReadyEventArgs e)
-        {
-            using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
-            {
-                this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
-                this.colorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
-                this.colorBitmap = new WriteableBitmap(this.sensor.DepthStream.FrameWidth, this.sensor.DepthStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
-
-                if (depthFrame != null)
-                {
-                    depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
-
-                    //Conversion profunidad RGB
-                    int minDepth = depthFrame.MinDepth;
-                    int maxDepth = depthFrame.MaxDepth;
-                    // Convertir profundidad a RGB
-                    int colorPixelIndex = 0;
-                    for (int i = 0; i < this.depthPixels.Length; ++i)
-                    {
-                        short depth = depthPixels[i].Depth;
-                        byte intensity = (byte)(depth >= minDepth && depth <= maxDepth ?
-                        depth : 0);
-                        this.colorPixels[colorPixelIndex++] = intensity;
-                        this.colorPixels[colorPixelIndex++] = intensity;
-                        this.colorPixels[colorPixelIndex++] = intensity;
-                        ++colorPixelIndex; // no alpha channel RGB
-                    }
-
-                    //Copiar color pixels a bitmap(visualizacion)
-                    // Copiar pixels RGB en el bitmap
-                    this.colorBitmap.WritePixels(
-                    new Int32Rect(0, 0, this.colorBitmap.PixelWidth,
-                    this.colorBitmap.PixelHeight),
-                    this.colorPixels,
-                    this.colorBitmap.PixelWidth * sizeof(int), 0);
-                    Image2.Source = colorBitmap;
-                }
-            }
-        }
-
-        private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
-        {
-            using (ColorImageFrame colorFrame = e.OpenColorImageFrame())
-            {
-                this.colorPixels = new byte[this.sensor.ColorStream.FramePixelDataLength];
-                this.colorBitmap = new WriteableBitmap(this.sensor.ColorStream.FrameWidth, this.sensor.ColorStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
-
-                if (colorFrame != null)
-                {
-                    colorFrame.CopyPixelDataTo(this.colorPixels);
-                    this.colorBitmap.WritePixels(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight), this.colorPixels, this.colorBitmap.PixelWidth * sizeof(int), 0);
-                    Image2.Source = colorBitmap;
-                }
-            }
-        }
-
-
     }
 }

@@ -40,9 +40,6 @@ namespace ProyectoKinnect
                 {
                     sensor = potentialSensor;
                     break;
-                }else
-                {
-                    texto.Text = "Kinect no preparada";
                 }
             }
 
@@ -53,6 +50,7 @@ namespace ProyectoKinnect
             catch (NullReferenceException)
             {
                 this.sensor = null;
+                texto.Text = "Kinect no preparada";
             }
 
             if (this.sensor != null)

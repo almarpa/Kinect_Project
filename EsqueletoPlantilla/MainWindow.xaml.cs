@@ -82,13 +82,13 @@ namespace Esqueleto
         /// </summary>
         private DrawingImage imageSource;
 
+        // Array of skeletons
+        private Skeleton[] skeletons;
+
         /// <summary>
         /// Initializes a new instance of the MainWindow class.
         /// </summary>
-        /// 
-
-        private Skeleton[] skeletons;
-        
+        ///         
         public MainWindow()
         {
             InitializeComponent();
@@ -160,11 +160,8 @@ namespace Esqueleto
                     sensor = potentialSensor;
                     if (this.sensor != null)
                     {
-                        //Habilitamos el sensor
                         this.sensor.SkeletonStream.Enable();
-
                         this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
-
                         this.sensor.Start();
                     }
                     break;
@@ -324,6 +321,7 @@ namespace Esqueleto
             }
 
             // UTILIZAR ESTA PRIMITIVA PARA EL DIBUJADO DE LA ELIPSE
+            // Comentado porque ya se ha utilizado
             //drawingContext.DrawEllipse(drawBrush, null, this.SkeletonPointToScreen(joint.Position), JointThickness, JointThickness);
         }
 
